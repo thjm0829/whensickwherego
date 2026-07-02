@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>아플 때 어디로? — 증상 기반 행동 안내</title>
+<meta name="description" content="갑자기 아플 때 병원·약국·119·자가관리 중 필요한 행동을 빠르게 안내합니다." />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Pretendard Variable', 'Pretendard', 'Noto Sans KR', 'system-ui', 'sans-serif'] },
+        colors: {
+          background: '#F7F3EA',
+          foreground: '#111827',
+          card: { DEFAULT: '#FFFDF8', foreground: '#111827' },
+          muted: { DEFAULT: '#F0EADB', foreground: '#6B7280' },
+          border: '#E7E1D3',
+          primary: { DEFAULT: '#4338CA', foreground: '#FFFDF8' },
+          secondary: { DEFAULT: '#EDE9FE', foreground: '#4338CA' },
+          accent: { DEFAULT: '#A78BFA', foreground: '#1F1B4B' },
+          danger: { DEFAULT: '#B91C1C', foreground: '#FFFDF8', soft: '#FBE3E3', 'soft-foreground': '#7F1D1D' },
+          hospital: { DEFAULT: '#4F46E5', foreground: '#FFFDF8' },
+          pharmacy: { DEFAULT: '#65A30D', foreground: '#FFFDF8' },
+          selfcare: { DEFAULT: '#D9E8D1', foreground: '#1F3D1B' },
+          kakao: { DEFAULT: '#EAB308', foreground: '#1F1A05' },
+          mild: { DEFAULT: '#D9E8D1', foreground: '#1F3D1B' },
+          caution: { DEFAULT: '#FDE68A', foreground: '#78350F' },
+        },
+        boxShadow: {
+          soft: '0 14px 36px -22px rgba(17,24,39,0.38)',
+          card: '0 8px 24px -16px rgba(17,24,39,0.22)',
+        },
+        keyframes: {
+          'splash-logo': { '0%': { opacity: '0', transform: 'scale(.92) translateY(6px)' }, '100%': { opacity: '1', transform: 'scale(1) translateY(0)' } },
+          'splash-text': { '0%': { opacity: '0', transform: 'translateY(8px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+          'splash-leave': { '0%': { opacity: '1', transform: 'translateY(0)' }, '100%': { opacity: '0', transform: 'translateY(-12px)' } },
+        },
+        animation: {
+          'splash-logo': 'splash-logo 700ms cubic-bezier(.22,1,.36,1) both',
+          'splash-text': 'splash-text 700ms cubic-bezier(.22,1,.36,1) 180ms both',
+          'splash-leave': 'splash-leave 380ms ease-in forwards',
+        },
+      },
+    },
+  };
+</script>
+<style>
+  html, body { background:#F7F3EA; color:#111827; font-family:'Pretendard Variable','Pretendard','Noto Sans KR',system-ui,sans-serif; -webkit-tap-highlight-color: transparent; }
+  *, p, h1, h2, h3, h4, h5, h6, li, span, button, a { word-break: keep-all; overflow-wrap: break-word; }
+</style>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-type="module" data-presets="react">
+const { useState, useMemo, useEffect } = React;
+
+/* ============ 증상 데이터 ============ */
+const SYMPTOMS = [
+  {
+    id: "cold", label: "감기·인후통·기침·콧물", emoji: "🤧", category: "general",
+    checks: {
+      mild: ["목이 살짝 간질거리거나 가렵다","콧물이나 코막힘이 있다","가벼운 기침이 있다","열은 없거나 미열 정도다","일상생활은 가능하다"],
+      caution: ["인후통이 심해 음식을 삼키기 어렵다","기침이 며칠째 계속된다","열이 함께 난다","몸살 기운이 심하다","증상이 점점 심해진다"],
+      danger: ["숨쉬기 어렵다","가슴 통증이 있다","의식이 흐려진다","고열이 지속된다","입술이나 얼굴이 창백하거나 푸르게 보인다"],
+    },
+    hospitals: [{label:"근처 이비인후과 찾기",query:"이비인후과"},{label:"근처 내과 찾기",query:"내과"}],
+    taxiQueries: ["근처 이비인후과","근처 내과"],
+    selfcareGuide: {
+      todayCare: ["충분한 휴식","수분 섭취","목 자극 줄이기","실내 습도 관리"],
+      lightExercise: ["무리한 운동은 피하기","컨디션이 괜찮다면 가벼운 산책 정도만"],
+      avoid: ["음주","흡연","무리한 운동","찬 공기 노출"],
+      hospitalCriteria: ["고열이 지속될 때","호흡 곤란","가슴 통증","증상이 점점 악화될 때"],
+    },
+  },
+  {
+    id: "fever", label: "발열", emoji: "🌡️", category: "general",
+    checks: {
+      mild: ["미열이 있다","물을 마실 수 있다","의식이 또렷하다","심한 통증은 없다","일상생활이 어느 정도 가능하다"],
+      caution: ["열이 하루 이상 지속된다","오한과 몸살이 심하다","물을 잘 못 마신다","두통·복통·기침 등 다른 증상이 함께 있다","해열제를 먹어도 열이 잘 떨어지지 않는다"],
+      danger: ["의식이 흐려진다","숨쉬기 어렵다","심한 탈수 증상이 있다","고열이 계속된다","경련이 있다"],
+    },
+    hospitals: [{label:"근처 내과 찾기",query:"내과"}],
+    taxiQueries: ["근처 내과"],
+    selfcareGuide: {
+      todayCare: ["수분 섭취","충분한 휴식","체온 기록해 두기"],
+      lightExercise: ["운동은 하지 말고 휴식 우선"],
+      avoid: ["무리한 운동","음주","사우나"],
+      hospitalCriteria: ["고열이 지속될 때","의식이 흐려질 때","호흡 곤란","심한 탈수 증상"],
+    },
+  },
+  {
+    id: "headache", label: "두통", emoji: "🤕", category: "general",
+    checks: {
+      mild: ["수면 부족이나 스트레스 후 생긴 두통이다","통증이 심하지 않다","쉬면 조금 나아진다","시야 이상이나 마비는 없다","평소에도 가끔 있던 두통과 비슷하다"],
+      caution: ["두통이 반복된다","평소보다 강도가 심하다","진통제를 먹어도 잘 낫지 않는다","구토가 함께 있다","두통 때문에 일상생활이 어렵다"],
+      danger: ["갑자기 매우 심한 두통이 생겼다","말이 어눌해졌다","한쪽 팔다리에 힘이 빠진다","시야가 흐려지거나 이상하다","의식이 흐려진다"],
+    },
+    hospitals: [{label:"근처 내과 찾기",query:"내과"},{label:"근처 신경과 찾기",query:"신경과"}],
+    taxiQueries: ["근처 내과","근처 신경과"],
+    selfcareGuide: {
+      todayCare: ["조용하고 어두운 곳에서 휴식","수분 섭취","수면 부족 여부 확인"],
+      lightExercise: ["가벼운 목·어깨 이완 정도만"],
+      avoid: ["과음","카페인 과다 섭취","장시간 화면 보기"],
+      hospitalCriteria: ["갑작스러운 극심한 두통","한쪽 마비","말이 어눌해짐","시야 이상"],
+    },
+  },
+  {
+    id: "gi", label: "복통·설사·구토", emoji: "🤢", category: "general",
+    checks: {
+      mild: ["가벼운 복통이 있다","설사가 1~2회 정도 있었다","물을 마실 수 있다","열은 없거나 미열이다","음식을 먹은 뒤 일시적으로 불편하다"],
+      caution: ["설사나 구토가 반복된다","복통이 계속된다","열이 함께 난다","음식이나 물을 먹기 어렵다","탈수 느낌이 있다"],
+      danger: ["피가 섞인 변이 나온다","극심한 복통이 있다","계속 토해서 물도 못 마신다","의식이 흐려진다","심한 탈수 증상이 있다"],
+    },
+    hospitals: [{label:"근처 내과 찾기",query:"내과"}],
+    taxiQueries: ["근처 내과"],
+    selfcareGuide: {
+      todayCare: ["수분 보충","자극적인 음식 피하기","충분한 휴식"],
+      lightExercise: ["운동은 하지 말고 휴식 우선"],
+      avoid: ["음주","기름진 음식","무리한 운동"],
+      hospitalCriteria: ["혈변이 보일 때","극심한 복통","구토가 계속될 때","심한 탈수"],
+    },
+  },
+  {
+    id: "neck", label: "목·어깨 통증 / 거북목", emoji: "💆", category: "musculoskeletal",
+    checks: {
+      mild: ["오래 앉아 있은 뒤 뻐근하다","스마트폰이나 노트북 사용 후 불편하다","움직이면 조금 풀린다","팔 저림은 없다","자세를 바꾸면 통증이 줄어든다"],
+      caution: ["통증이 며칠째 지속된다","목을 돌리기 어렵다","어깨 통증이 심하다","팔이 저리거나 찌릿하다","잠을 자기 어려울 정도로 불편하다"],
+      danger: ["팔이나 손에 힘이 빠진다","감각이 둔해진다","큰 외상 이후 통증이 생겼다","통증이 매우 심하고 움직이기 어렵다","두통·어지럼·시야 이상이 함께 있다"],
+    },
+    hospitals: [{label:"근처 정형외과 찾기",query:"정형외과"},{label:"근처 재활의학과 찾기",query:"재활의학과"}],
+    taxiQueries: ["근처 정형외과","근처 재활의학과"],
+    homecare: ["가벼운 목 스트레칭","자세 조절","장시간 스마트폰 사용 줄이기"],
+    selfcareGuide: {
+      todayCare: ["자세 자주 바꾸기","따뜻한 온찜질","장시간 스마트폰 사용 줄이기"],
+      lightExercise: ["목을 천천히 좌우로 돌리기","어깨 으쓱 올렸다 내리기","가슴 펴는 스트레칭"],
+      avoid: ["목을 강하게 꺾는 동작","통증을 참고 운동하기"],
+      hospitalCriteria: ["팔 저림이 지속될 때","팔에 힘이 빠질 때","감각 이상"],
+    },
+  },
+  {
+    id: "back", label: "허리 통증", emoji: "🧍", category: "musculoskeletal",
+    checks: {
+      mild: ["오래 앉아 있어서 허리가 뻐근하다","가볍게 움직이면 조금 완화된다","다리 저림은 없다","큰 외상은 없었다","통증이 허리 주변에만 있다"],
+      caution: ["통증이 며칠 이상 지속된다","다리로 통증이 내려간다","움직이기 어렵다","운동 중 통증이 생겼다","허리를 숙이거나 펼 때 통증이 심하다"],
+      danger: ["다리에 힘이 빠진다","감각이 이상하다","대소변 조절이 어렵다","큰 외상 이후 통증이 생겼다","통증이 매우 심하다"],
+    },
+    hospitals: [{label:"근처 정형외과 찾기",query:"정형외과"},{label:"근처 재활의학과 찾기",query:"재활의학과"}],
+    taxiQueries: ["근처 정형외과","근처 재활의학과"],
+    homecare: ["무리한 운동 중단","가벼운 걷기","통증 없는 범위의 스트레칭"],
+    selfcareGuide: {
+      todayCare: ["무리한 운동 중단","가벼운 걷기","오래 앉아 있기 줄이기"],
+      lightExercise: ["통증 없는 범위에서 걷기","허리 주변 가벼운 스트레칭"],
+      avoid: ["무거운 물건 들기","데드리프트·스쿼트 같은 고강도 운동"],
+      hospitalCriteria: ["다리 저림","다리 힘 빠짐","대소변 이상","큰 외상 이후의 통증"],
+    },
+  },
+  {
+    id: "ankle", label: "발목 삠·무릎 통증", emoji: "🦵", category: "musculoskeletal",
+    checks: {
+      mild: ["통증은 있지만 걸을 수 있다","붓기가 심하지 않다","변형은 없다","가벼운 운동 후 불편한 정도다","휴식하면 통증이 조금 줄어든다"],
+      caution: ["걷기 어렵다","붓기나 멍이 있다","통증이 점점 심해진다","관절을 움직이기 어렵다","계단을 오르내리기 힘들다"],
+      danger: ["뼈나 관절 변형이 의심된다","체중을 전혀 실을 수 없다","극심한 통증이 있다","큰 외상 이후 발생했다","감각이 없거나 발이 차갑다"],
+    },
+    hospitals: [{label:"근처 정형외과 찾기",query:"정형외과"}],
+    taxiQueries: ["근처 정형외과"],
+    homecare: ["휴식","냉찜질","무리한 운동 피하기"],
+    selfcareGuide: {
+      todayCare: ["충분한 휴식","냉찜질","붓기 변화 관찰"],
+      lightExercise: ["통증이 줄어든 뒤 가벼운 관절 움직임부터"],
+      avoid: ["뛰기","점프 동작","무리한 하체 운동"],
+      hospitalCriteria: ["체중을 싣지 못할 때","심한 붓기","관절 변형","극심한 통증"],
+    },
+  },
+];
+
+function decideResult(symptom, selected) {
+  const total = selected.mild.length + selected.caution.length + selected.danger.length;
+  if (total === 0) return null;
+  if (selected.danger.length > 0) return "emergency";
+  if (selected.caution.length > 0) return "hospital";
+  if (symptom.category === "general") return "pharmacy";
+  return "selfcare";
+}
+
+const emptySel = { mild: [], caution: [], danger: [] };
+const MAP_NOTICE = "카카오맵의 영업정보는 실제와 다를 수 있으므로 방문 전 전화 확인을 권장합니다.";
+
+function openKakaoMapSearch(query) {
+  window.open(`https://map.kakao.com/link/search/${encodeURIComponent(query)}`, "_blank", "noopener,noreferrer");
+}
+function openKakaoMapCurrentLocation() {
+  if (!navigator.geolocation) { alert("위치 정보를 가져올 수 없습니다. 카카오맵에서 직접 현재 위치를 확인해주세요."); return; }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const { latitude, longitude } = pos.coords;
+      window.open(`https://map.kakao.com/link/map/현재위치,${latitude},${longitude}`, "_blank", "noopener,noreferrer");
+    },
+    () => alert("위치 정보를 가져올 수 없습니다. 카카오맵에서 직접 현재 위치를 확인해주세요."),
+    { timeout: 5000 }
+  );
+}
+function openKakaoT() {
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  const isAndroid = /Android/i.test(ua);
+  const isMobile = isIOS || isAndroid;
+  if (!isMobile) {
+    alert("카카오T는 모바일 앱입니다. 모바일 기기에서 이용해주세요. 설치 안내 페이지로 이동합니다.");
+    window.open("https://kakaot.kakao.com/", "_blank", "noopener,noreferrer");
+    return;
+  }
+  const fallbackUrl = isIOS
+    ? "https://apps.apple.com/kr/app/id981110422"
+    : "https://play.google.com/store/apps/details?id=com.kakao.taxi";
+  const start = Date.now();
+  const timer = window.setTimeout(() => {
+    if (Date.now() - start < 2500 && !document.hidden) window.location.href = fallbackUrl;
+  }, 1800);
+  const onVis = () => {
+    if (document.hidden) { clearTimeout(timer); document.removeEventListener("visibilitychange", onVis); }
+  };
+  document.addEventListener("visibilitychange", onVis);
+  window.location.href = "kakaot://";
+}
+
+/* ============ 로고 ============ */
+function Logo({ size = 44 }) {
+  return (
+    <div
+      style={{ width: size, height: size }}
+      className="relative grid place-items-center rounded-2xl bg-gradient-to-br from-primary to-accent text-white shadow-soft"
+    >
+      <span style={{ fontSize: size * 0.5 }} className="font-bold leading-none">✚</span>
+      <span style={{ fontSize: size * 0.32 }} className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full bg-white text-primary shadow">📍</span>
+    </div>
+  );
+}
+
+/* ============ 화면들 ============ */
+function Splash({ onDone }) {
+  const [leaving, setLeaving] = useState(false);
+  useEffect(() => {
+    const t1 = setTimeout(() => setLeaving(true), 1600);
+    const t2 = setTimeout(onDone, 1980);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [onDone]);
+  return (
+    <div className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background px-8 ${leaving ? "animate-splash-leave" : ""}`}>
+      <div className="flex flex-col items-center animate-splash-logo">
+        <Logo size={110} />
+        <h1 className="animate-splash-text mt-5 text-center text-2xl font-extrabold tracking-tight text-foreground">
+          아플 때 <span className="text-primary">어디로?</span>
+        </h1>
+        <p className="animate-splash-text mt-3 text-center text-sm text-muted-foreground">
+          아플 때 필요한 행동을 빠르게 안내합니다
+        </p>
+      </div>
+      <p className="animate-splash-text absolute bottom-8 left-1/2 max-w-xs -translate-x-1/2 px-4 text-center text-[11px] leading-relaxed text-muted-foreground/80">
+        본 서비스는 의학적 진단이 아닌 증상 기반 행동 안내를 제공합니다
+      </p>
+    </div>
+  );
+}
+
+function Header({ onHome }) {
+  return (
+    <header className="mb-6 flex items-center justify-between">
+      <button onClick={onHome} className="flex items-center gap-2">
+        <Logo size={36} />
+        <span className="text-base font-bold tracking-tight">아플 때 어디로?</span>
+      </button>
+    </header>
+  );
+}
+
+function Landing({ onCheck, onSos }) {
+  return (
+    <section className="flex flex-col gap-6">
+      <div className="rounded-3xl bg-gradient-to-br from-primary to-accent p-7 text-primary-foreground shadow-lg">
+        <p className="mb-3 inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-medium">증상 기반 행동 안내</p>
+        <h1 className="text-2xl font-bold leading-snug">갑자기 아플 때,<br/>어디로 가야 할까요?</h1>
+        <p className="mt-3 text-sm leading-relaxed text-white/90">병원·약국·119·자가관리 중 필요한 행동을 빠르게 확인해보세요.</p>
+      </div>
+      <div className="flex flex-col gap-3">
+        <button onClick={onCheck} className="w-full rounded-2xl bg-primary p-6 text-left text-primary-foreground shadow-md transition active:scale-[0.98]">
+          <div className="flex items-center gap-3"><span className="text-2xl">🩺</span><span className="text-lg font-bold">증상 체크하기</span></div>
+          <p className="mt-2 text-xs leading-relaxed text-white/90">감기, 두통, 복통, 허리통증 등 일반 증상을 확인합니다.</p>
+        </button>
+        <button onClick={onSos} className="w-full rounded-2xl bg-danger p-6 text-left text-danger-foreground shadow-md transition active:scale-[0.98]">
+          <div className="flex items-center gap-3"><span className="text-2xl">🚨</span><span className="text-lg font-bold">응급 도움받기</span></div>
+          <p className="mt-2 text-xs leading-relaxed opacity-90">위험 상황에서는 바로 119와 위치 확인 기능을 이용합니다.</p>
+        </button>
+      </div>
+      <p className="px-2 text-center text-xs leading-relaxed text-muted-foreground">이 서비스는 진단이 아니라 증상 기반 행동 안내를 제공합니다.</p>
+    </section>
+  );
+}
+
+function SosScreen({ onBack, onSelect, onHome }) {
+  return (
+    <section className="flex flex-col gap-4">
+      <button onClick={onBack} className="text-sm text-muted-foreground">← 처음 화면으로</button>
+      <div className="rounded-3xl bg-danger p-6 text-danger-foreground shadow-soft">
+        <div className="inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-bold">🚨 응급 도움</div>
+        <h2 className="mt-3 text-2xl font-bold">응급 도움이 필요한가요?</h2>
+        <p className="mt-2 text-sm leading-relaxed text-white/90">호흡곤란, 의식 저하, 심한 가슴 통증, 마비, 심한 출혈 등 응급 상황이 의심되면 택시보다 119가 우선입니다.</p>
+        <div className="mt-5 flex flex-col gap-2.5">
+          <a href="tel:119" className="grid w-full place-items-center rounded-xl bg-card py-4 text-base font-bold text-danger shadow-card">📞 119 전화하기</a>
+          <button onClick={openKakaoMapCurrentLocation} className="w-full rounded-xl bg-white/20 py-3.5 text-sm font-semibold text-white ring-1 ring-white/40 active:scale-[0.98]">📍 현재 위치 확인하기</button>
+          <button onClick={() => alert("보호자에게 현재 상황과 위치를 알렸습니다. (데모)")} className="w-full rounded-xl bg-white/20 py-3.5 text-sm font-semibold text-white ring-1 ring-white/40 active:scale-[0.98]">👥 보호자에게 알리기</button>
+          <p className="text-[11px] leading-relaxed text-white/85">{MAP_NOTICE}</p>
+        </div>
+      </div>
+      <p className="rounded-2xl bg-muted px-4 py-3 text-center text-xs leading-relaxed text-muted-foreground">본 서비스는 의학적 진단이나 처방을 제공하지 않습니다. 증상이 심하거나 응급 상황이 의심되면 즉시 119 또는 의료기관에 연락하세요.</p>
+      <div className="flex gap-3">
+        <button onClick={onSelect} className="flex-1 rounded-xl bg-secondary py-3.5 text-sm font-semibold text-secondary-foreground">증상 체크로 돌아가기</button>
+        <button onClick={onHome} className="flex-1 rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground">처음 화면으로</button>
+      </div>
+    </section>
+  );
+}
+
+function SelectSymptom({ onPick, onBack }) {
+  return (
+    <section>
+      <button onClick={onBack} className="mb-3 text-sm text-muted-foreground">← 뒤로</button>
+      <h2 className="text-xl font-bold">어떤 증상이 있나요?</h2>
+      <p className="mt-1 text-sm text-muted-foreground">가장 가까운 증상을 하나 선택해주세요.</p>
+      <ul className="mt-5 grid grid-cols-1 gap-3">
+        {SYMPTOMS.map((s) => (
+          <li key={s.id}>
+            <button onClick={() => onPick(s.id)} className="flex w-full items-center gap-4 rounded-2xl bg-card p-4 text-left shadow-sm transition active:scale-[0.99] hover:bg-accent/30">
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-secondary text-2xl">{s.emoji}</span>
+              <span className="flex-1 text-base font-semibold">{s.label}</span>
+              <span className="text-muted-foreground">›</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function Group({ title, subtitle, color, items, selected, onToggle }) {
+  const styles = {
+    mild: { bar: "bg-mild text-mild-foreground", dot: "bg-mild-foreground" },
+    caution: { bar: "bg-caution text-caution-foreground", dot: "bg-caution-foreground" },
+    danger: { bar: "bg-danger-soft text-danger-soft-foreground", dot: "bg-danger text-danger-foreground" },
+  }[color];
+  return (
+    <div className="overflow-hidden rounded-2xl bg-card shadow-sm">
+      <div className={`flex items-center justify-between px-4 py-3 ${styles.bar}`}>
+        <div><div className="text-sm font-bold">{title}</div><div className="text-[11px] opacity-80">{subtitle}</div></div>
+        <span className="text-xs font-medium">{selected.length}/{items.length}</span>
+      </div>
+      <ul className="divide-y divide-border">
+        {items.map((it, i) => {
+          const on = selected.includes(i);
+          return (
+            <li key={i}>
+              <button onClick={() => onToggle(i)} className={`flex w-full items-start gap-3 px-4 py-3 text-left text-sm transition ${on ? "bg-accent/40" : "hover:bg-secondary/40"}`}>
+                <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border-2 ${on ? `${styles.dot} border-transparent text-white` : "border-border"}`}>{on && "✓"}</span>
+                <span className="leading-relaxed">{it}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function CheckList({ symptom, selected, setSelected, error, onBack, onSubmit }) {
+  function toggle(level, idx) {
+    const cur = selected[level];
+    const next = cur.includes(idx) ? cur.filter((i) => i !== idx) : [...cur, idx];
+    setSelected({ ...selected, [level]: next });
+  }
+  const total = selected.mild.length + selected.caution.length + selected.danger.length;
+  return (
+    <section>
+      <button onClick={onBack} className="mb-3 text-sm text-muted-foreground">← 증상 다시 고르기</button>
+      <div className="flex items-center gap-3">
+        <span className="grid h-12 w-12 place-items-center rounded-xl bg-secondary text-2xl">{symptom.emoji}</span>
+        <div><h2 className="text-lg font-bold">{symptom.label}</h2><p className="text-xs text-muted-foreground">해당하는 항목을 모두 선택해주세요 (중복 선택 가능)</p></div>
+      </div>
+      <div className="mt-6 flex flex-col gap-4">
+        <Group title="가벼움" subtitle="일상에서 흔히 겪는 정도" color="mild" items={symptom.checks.mild} selected={selected.mild} onToggle={(i) => toggle("mild", i)} />
+        <Group title="주의 필요" subtitle="지속되거나 점점 심해짐" color="caution" items={symptom.checks.caution} selected={selected.caution} onToggle={(i) => toggle("caution", i)} />
+        <Group title="위험 신호" subtitle="응급 상황 가능성" color="danger" items={symptom.checks.danger} selected={selected.danger} onToggle={(i) => toggle("danger", i)} />
+      </div>
+      {error && <p className="mt-4 rounded-xl bg-danger/40 px-4 py-3 text-center text-sm font-medium text-danger-foreground">{error}</p>}
+      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-background/95 backdrop-blur">
+        <div className="mx-auto flex max-w-md items-center gap-3 px-5 py-3">
+          <div className="text-xs text-muted-foreground">선택 <span className="font-bold text-foreground">{total}</span>개</div>
+          <button onClick={onSubmit} className="ml-auto flex-1 rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-md active:scale-[0.98]">결과 보기</button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ActionBtn({ children, onClick, variant = "solid" }) {
+  return (
+    <button onClick={onClick} className={`w-full rounded-xl py-3 text-sm font-semibold transition active:scale-[0.98] ${variant === "solid" ? "bg-white/95 text-foreground shadow-sm" : "bg-white/20 text-white ring-1 ring-white/40"}`}>{children}</button>
+  );
+}
+
+function EmergencyCard() {
+  return (
+    <div className="rounded-3xl bg-danger p-6 text-danger-foreground shadow-soft">
+      <div className="inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-bold">🚨 응급</div>
+      <h2 className="mt-3 text-2xl font-bold">응급 가능성이 있습니다</h2>
+      <p className="mt-2 text-sm text-white/90">위험 신호가 있다면 택시보다 119가 우선입니다.</p>
+      <div className="mt-5 flex flex-col gap-2.5">
+        <a href="tel:119" className="grid w-full place-items-center rounded-xl bg-card py-4 text-base font-bold text-danger shadow-card">📞 119 전화하기</a>
+        <ActionBtn variant="ghost" onClick={openKakaoMapCurrentLocation}>📍 현재 위치 확인하기</ActionBtn>
+        <ActionBtn variant="ghost" onClick={() => alert("보호자에게 현재 상황과 위치를 알렸습니다. (데모)")}>👥 보호자에게 알리기</ActionBtn>
+        <p className="text-[11px] leading-relaxed text-white/85">{MAP_NOTICE}</p>
+      </div>
+    </div>
+  );
+}
+
+function KakaoTModal({ taxiQueries, onClose }) {
+  const [copied, setCopied] = useState(false);
+  async function copyQueries() {
+    const text = taxiQueries.join(", ");
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1800); }
+    catch { alert(`복사에 실패했습니다. 직접 복사해 주세요:\n${text}`); }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center" onClick={onClose}>
+      <div className="w-full max-w-md rounded-3xl bg-card p-6 text-card-foreground shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-bold">비응급 이동이 필요한가요?</h3>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">응급 상황이 의심되면 택시보다 119가 우선입니다. 비응급이지만 병원 이동이 필요한 경우 카카오T 앱을 이용할 수 있습니다.</p>
+        <div className="mt-5 flex flex-col gap-2.5">
+          <a href="tel:119" className="grid w-full place-items-center rounded-xl bg-danger py-3.5 text-sm font-bold text-danger-foreground shadow-sm">📞 119 전화하기</a>
+          <button onClick={openKakaoT} className="w-full rounded-xl bg-kakao py-3.5 text-sm font-bold text-kakao-foreground shadow-card active:scale-[0.98]">🚕 카카오T 앱 열기</button>
+          <button onClick={copyQueries} className="w-full rounded-xl bg-secondary py-3.5 text-sm font-semibold text-secondary-foreground active:scale-[0.98]">📋 {copied ? "복사되었습니다" : `진료과 검색어 복사 (${taxiQueries.join(", ")})`}</button>
+          <button onClick={onClose} className="w-full rounded-xl bg-muted py-3 text-sm font-medium text-muted-foreground active:scale-[0.98]">닫기</button>
+        </div>
+        <p className="mt-4 rounded-xl bg-muted px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">본 기능은 카카오T 자동 호출이 아니라 앱 실행 또는 설치 안내 기능입니다. 실제 택시 호출은 사용자가 카카오T 앱에서 직접 진행해야 합니다.</p>
+      </div>
+    </div>
+  );
+}
+
+function HospitalCard({ symptom }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="rounded-3xl bg-hospital p-6 text-hospital-foreground shadow-soft">
+      <div className="inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-bold">🏥 병원 권장</div>
+      <h2 className="mt-3 text-2xl font-bold">병원 진료 확인을 권장합니다</h2>
+      <p className="mt-2 text-sm text-white/90">증상이 지속되거나 악화된다면 병원 진료가 필요할 수 있습니다.</p>
+      <div className="mt-5 flex flex-col gap-2.5">
+        {symptom.hospitals.map((h) => (
+          <ActionBtn key={h.query} onClick={() => openKakaoMapSearch(h.query)}>📍 카카오맵에서 {h.label}</ActionBtn>
+        ))}
+        <p className="text-[11px] leading-relaxed text-white/85">{MAP_NOTICE}</p>
+        <button onClick={() => setShow(true)} className="w-full rounded-xl bg-kakao py-3 text-sm font-bold text-kakao-foreground shadow-card transition active:scale-[0.98]">🚕 카카오T로 이동하기</button>
+        <ActionBtn variant="ghost" onClick={() => alert("방문 전 해당 병원에 전화로 진료 가능 여부를 확인해 주세요. (데모)")}>☎️ 방문 전 전화 확인하기</ActionBtn>
+      </div>
+      <p className="mt-4 text-[11px] leading-relaxed text-white/85">증상에 따라 추천 진료과를 안내하며, 정확한 진료과는 의료기관에 문의하세요.</p>
+      {show && <KakaoTModal taxiQueries={symptom.taxiQueries} onClose={() => setShow(false)} />}
+    </div>
+  );
+}
+
+function PharmacyCard({ symptom, selected }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="rounded-3xl bg-pharmacy p-6 text-pharmacy-foreground shadow-soft">
+      <div className="inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-bold">💊 약국 상담</div>
+      <h2 className="mt-3 text-2xl font-bold">약국 상담을 고려할 수 있습니다</h2>
+      <p className="mt-2 text-sm text-white/90">응급 신호가 없고 증상이 가벼운 경우 약국에서 증상을 설명하고 상담받을 수 있습니다.</p>
+      <div className="mt-5 flex flex-col gap-2.5">
+        <ActionBtn onClick={() => openKakaoMapSearch("약국")}>📍 카카오맵에서 약국 찾기</ActionBtn>
+        <p className="text-[11px] leading-relaxed text-white/85">{MAP_NOTICE}</p>
+        <ActionBtn variant="ghost" onClick={() => setShow((v) => !v)}>📝 약사에게 말할 증상 정리하기</ActionBtn>
+        {show && (
+          <div className="rounded-xl bg-white/95 p-4 text-foreground">
+            <div className="text-xs font-bold text-muted-foreground">증상</div>
+            <div className="mt-1 text-sm font-semibold">{symptom.emoji} {symptom.label}</div>
+            <div className="mt-3 text-xs font-bold text-muted-foreground">현재 상태</div>
+            <ul className="mt-1 list-disc pl-5 text-sm leading-relaxed">
+              {["danger","caution","mild"].flatMap((lvl) => selected[lvl].map((i) => <li key={`${lvl}-${i}`}>{symptom.checks[lvl][i]}</li>))}
+            </ul>
+          </div>
+        )}
+        <ActionBtn variant="ghost" onClick={() => alert("열이 39도 이상 지속되거나, 호흡 곤란·심한 통증·의식 변화가 있다면 병원 진료가 필요합니다. (데모)")}>⚠️ 악화 시 병원 기준 보기</ActionBtn>
+      </div>
+    </div>
+  );
+}
+
+function SelfcareCard({ symptom }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="rounded-3xl bg-selfcare p-6 text-selfcare-foreground shadow-soft">
+      <div className="inline-block rounded-full bg-selfcare-foreground/10 px-3 py-1 text-xs font-bold">🏠 자가관리</div>
+      <h2 className="mt-3 text-2xl font-bold">경과 관찰과 자가관리를 고려할 수 있습니다</h2>
+      <p className="mt-2 text-sm leading-relaxed opacity-80">위험 신호가 없고 증상이 가벼운 경우 휴식, 수분 섭취, 찜질, 가벼운 스트레칭 등을 고려할 수 있습니다.</p>
+      <div className="mt-5 flex flex-col gap-2.5">
+        <button onClick={() => setShow((v) => !v)} className="w-full rounded-xl bg-card py-3 text-sm font-semibold text-foreground shadow-card active:scale-[0.98]">🧘 홈케어 방법 보기</button>
+        {show && symptom.homecare && (
+          <div className="rounded-xl bg-card p-4 text-foreground">
+            <div className="text-xs font-bold text-muted-foreground">{symptom.label} 홈케어</div>
+            <ul className="mt-2 list-disc pl-5 text-sm leading-relaxed">{symptom.homecare.map((h) => <li key={h}>{h}</li>)}</ul>
+          </div>
+        )}
+        <button onClick={() => alert("통증이 며칠 이상 지속되거나, 저림·힘 빠짐·큰 외상·움직임 제한이 생기면 병원 진료를 권장합니다. (데모)")} className="w-full rounded-xl bg-selfcare-foreground/10 py-3 text-sm font-semibold text-selfcare-foreground ring-1 ring-selfcare-foreground/20 active:scale-[0.98]">⚠️ 악화 기준 확인하기</button>
+      </div>
+    </div>
+  );
+}
+
+function SelfcareGuideSection({ symptom }) {
+  const g = symptom.selfcareGuide;
+  const cards = [
+    { emoji: "🌿", title: "오늘 할 수 있는 관리", subtitle: "가벼운 증상일 때 시도해 볼 수 있어요", items: g.todayCare, tone: "default" },
+    { emoji: "🤸", title: "가벼운 운동 또는 스트레칭", subtitle: "통증 없는 범위에서만", items: g.lightExercise, tone: "default" },
+    { emoji: "🚫", title: "피해야 할 행동", subtitle: "회복을 방해할 수 있어요", items: g.avoid, tone: "default" },
+    { emoji: "🏥", title: "병원에 가야 하는 기준", subtitle: "다음 신호가 있으면 진료를 받아보세요", items: g.hospitalCriteria, tone: "caution" },
+  ];
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="px-1">
+        <h3 className="text-base font-bold">자가관리 및 가벼운 운동 안내</h3>
+        <p className="mt-1 text-xs text-muted-foreground">진단이 아닌 참고용 안내입니다. 가벼운 증상일 때 고려할 수 있는 관리 방법이에요.</p>
+      </div>
+      {cards.map((c) => (
+        <div key={c.title} className="overflow-hidden rounded-2xl bg-card shadow-sm">
+          <div className={`flex items-start gap-3 px-4 py-3 ${c.tone === "caution" ? "bg-caution text-caution-foreground" : "bg-secondary/60 text-secondary-foreground"}`}>
+            <span className="text-xl leading-none">{c.emoji}</span>
+            <div className="flex-1"><div className="text-sm font-bold">{c.title}</div><div className="text-[11px] opacity-80">{c.subtitle}</div></div>
+          </div>
+          <ul className="flex flex-col gap-2 px-5 py-4 text-sm leading-relaxed">
+            {c.items.map((it, i) => (
+              <li key={i} className="flex gap-2"><span className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/40" /><span>{it}</span></li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      <p className="rounded-2xl bg-muted px-4 py-3 text-center text-xs leading-relaxed text-muted-foreground">자가관리 안내는 가벼운 증상일 때 참고용입니다. 통증이나 증상이 심해지면 즉시 중단하고 의료기관에 문의하세요.</p>
+    </div>
+  );
+}
+
+function Result({ symptom, selected, result, onHome, onAnother }) {
+  const why = { emergency: "위험 신호 항목이 선택되어 응급 가능성이 있다고 판단했습니다.", hospital: "주의 필요 항목이 선택되어 병원 진료 확인을 권장합니다.", pharmacy: "가벼움 항목만 선택되어 약국 상담을 고려할 수 있습니다.", selfcare: "가벼움 항목만 선택되어 자가관리를 고려할 수 있습니다." }[result];
+  return (
+    <section className="flex flex-col gap-4">
+      {result === "emergency" && <EmergencyCard />}
+      {result === "hospital" && <HospitalCard symptom={symptom} />}
+      {result === "pharmacy" && <PharmacyCard symptom={symptom} selected={selected} />}
+      {result === "selfcare" && <SelfcareCard symptom={symptom} />}
+      {(result === "selfcare" || result === "pharmacy") && <SelfcareGuideSection symptom={symptom} />}
+
+      <div className="rounded-2xl bg-card p-4 shadow-sm">
+        <div className="text-xs font-medium text-muted-foreground">선택한 증상</div>
+        <div className="mt-1 flex items-center gap-2"><span className="text-xl">{symptom.emoji}</span><span className="font-semibold">{symptom.label}</span></div>
+        <div className="mt-4 text-xs font-medium text-muted-foreground">선택한 체크 항목</div>
+        <ul className="mt-2 flex flex-col gap-1.5 text-sm">
+          {["danger","caution","mild"].flatMap((lvl) => selected[lvl].map((i) => {
+            const tag = lvl === "danger" ? "위험" : lvl === "caution" ? "주의" : "가벼움";
+            const cls = lvl === "danger" ? "bg-danger text-danger-foreground" : lvl === "caution" ? "bg-caution text-caution-foreground" : "bg-mild text-mild-foreground";
+            return (<li key={`${lvl}-${i}`} className="flex gap-2"><span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold ${cls}`}>{tag}</span><span className="leading-relaxed">{symptom.checks[lvl][i]}</span></li>);
+          }))}
+        </ul>
+        <div className="mt-4 rounded-xl bg-secondary/60 p-3 text-xs leading-relaxed text-secondary-foreground"><b>판단 근거:</b> {why}</div>
+      </div>
+
+      <p className="rounded-2xl bg-muted px-4 py-3 text-center text-xs leading-relaxed text-muted-foreground">본 서비스는 의학적 진단이나 처방을 제공하지 않습니다. 증상이 심하거나 응급 상황이 의심되면 즉시 119 또는 의료기관에 연락하세요.</p>
+      <div className="flex gap-3">
+        <button onClick={onHome} className="flex-1 rounded-xl bg-secondary py-3.5 text-sm font-semibold text-secondary-foreground">처음으로</button>
+        <button onClick={onAnother} className="flex-1 rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground">다른 증상 체크</button>
+      </div>
+    </section>
+  );
+}
+
+function App() {
+  const [step, setStep] = useState("landing");
+  const [symptomId, setSymptomId] = useState(null);
+  const [selected, setSelected] = useState(emptySel);
+  const [error, setError] = useState(null);
+  const [showSplash, setShowSplash] = useState(true);
+
+  const symptom = useMemo(() => SYMPTOMS.find((s) => s.id === symptomId) ?? null, [symptomId]);
+  const result = symptom ? decideResult(symptom, selected) : null;
+
+  function reset() { setStep("landing"); setSymptomId(null); setSelected(emptySel); setError(null); }
+  function pickAnother() { setSymptomId(null); setSelected(emptySel); setError(null); setStep("select"); }
+
+  return (
+    <div className="min-h-screen bg-background">
+      {showSplash && <Splash onDone={() => setShowSplash(false)} />}
+      <div className="mx-auto w-full max-w-md px-5 pb-28 pt-6">
+        <Header onHome={reset} />
+        {step === "landing" && <Landing onCheck={() => setStep("select")} onSos={() => setStep("sos")} />}
+        {step === "sos" && <SosScreen onBack={() => setStep("landing")} onSelect={() => setStep("select")} onHome={reset} />}
+        {step === "select" && <SelectSymptom onPick={(id) => { setSymptomId(id); setSelected(emptySel); setError(null); setStep("check"); }} onBack={() => setStep("landing")} />}
+        {step === "check" && symptom && (
+          <CheckList symptom={symptom} selected={selected} setSelected={setSelected} error={error}
+            onBack={() => setStep("select")}
+            onSubmit={() => { if (!result) { setError("증상을 하나 이상 선택해주세요"); return; } setError(null); setStep("result"); }} />
+        )}
+        {step === "result" && symptom && result && (
+          <Result symptom={symptom} selected={selected} result={result} onHome={reset} onAnother={pickAnother} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
